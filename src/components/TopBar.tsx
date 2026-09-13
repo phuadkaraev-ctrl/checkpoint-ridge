@@ -32,8 +32,11 @@ export const TopBar = ({scenario, snapshot, progress, quality, soundOn, onToggle
     <div className="telemetry-strip" aria-label="Current model state">
       <div><small>SCENARIO</small><strong>{scenario.index} / {scenario.tab}</strong></div>
       <div><small>MODEL STEP</small><strong>{String(Math.round(progress * 100)).padStart(2, '0')} / 100</strong></div>
-      <div><small>DIRTY PAGES</small><strong>{snapshot.dirtyPages}<em> modeled</em></strong></div>
-      <div><small>FPI SIGNAL</small><strong>{Math.round(snapshot.fpiIntensity * 100)}%<em> modeled</em></strong></div>
+      <div><small>DIRTY-PAGE LOAD</small><strong>{snapshot.dirtyPages}%<em> modeled</em></strong></div>
+      <div>
+        <small>{scenario.id === 'evidence' ? 'FPI VS 5 MIN' : 'FPI SIGNAL'}</small>
+        <strong>{Math.round(snapshot.fpiIntensity * 100)}%<em>{scenario.id === 'evidence' ? ' of baseline' : ' modeled'}</em></strong>
+      </div>
       <div className="phase-cell"><small>CURRENT PHASE</small><strong>{snapshot.phase}</strong></div>
     </div>
 

@@ -5,10 +5,17 @@ type NarrativeCardProps = {scenario: Scenario; progress: number; snapshot: Model
 
 export const NarrativeCard = ({scenario, progress, snapshot}: NarrativeCardProps) => {
   const stage = scenario.id === 'cycle' ? getCycleStage(progress) : null;
+  const evidenceClass = scenario.evidence === 'Measured'
+    ? 'measured'
+    : scenario.evidence === 'Directional model'
+      ? 'modeled'
+      : scenario.evidence === 'Observed + concept'
+        ? 'mixed'
+        : '';
   return (
     <section className="narrative-card" aria-live="polite">
       <div className="narrative-meta">
-        <span className={`evidence-pill ${scenario.evidence === 'Measured' ? 'measured' : scenario.evidence === 'Directional model' ? 'modeled' : ''}`}>{scenario.evidence}</span>
+        <span className={`evidence-pill ${evidenceClass}`}>{scenario.evidence}</span>
         <span className="scene-count">{scenario.index} / 05</span>
       </div>
       <p className="narrative-eyebrow">{stage?.kicker ?? scenario.eyebrow}</p>

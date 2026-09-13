@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
-import {BENCHMARK, CYCLE_STAGES, SCENARIOS, SYSTEM_NODES, getCycleStage, reductionFromBaseline} from './data';
-import {getModelSnapshot} from './simulation';
+import {BENCHMARK, CYCLE_STAGES, RECOVERY_EXAMPLES, SCENARIOS, SYSTEM_NODES, getCycleStage, reductionFromBaseline} from './data';
+import {benchmarkRatios, getFpiSignal, getModelSnapshot, getTuningDerived} from './simulation';
 
 describe('verified checkpoint content', () => {
   it('preserves the four PostgreSQL 18 pgbench measurements exactly', () => {
@@ -25,6 +25,36 @@ describe('verified checkpoint content', () => {
     expect(reductionFromBaseline(BENCHMARK[3].walFpi, BENCHMARK[0].walFpi)).toBe(89);
   });
 
+  it('keeps WAL and FPI evidence on separate measured ratios', () => {
+    const ratios = benchmarkRatios(3600);
+    expect(ratios.wal).toBeCloseTo(2.030713106 / 11.93793559, 12);
+    expect(ratios.fpi).toBeCloseTo(161_776 / 1_476_817, 12);
+    expect(ratios.wal).not.toBeCloseTo(ratios.fpi, 3);
+  });
+
+  it('uses the same FPI signal for the scenario snapshot', () => {
+    const progress = 0.37;
+    const signal = getFpiSignal(progress);
+    const snapshot = getModelSnapshot('fpi', progress, {timeoutMinutes: 30, maxWalGiB: 8, completionTarget: 0.9, walRateGiBPerHour: 12}, benchmarkRatios(3600));
+    expect(snapshot.fpiIntensity).toBeCloseTo(signal.fpi, 12);
+  });
+
+  it('stops extending the modeled interval when the soft WAL trigger binds first', () => {
+    const atFifty = getTuningDerived({timeoutMinutes: 50, maxWalGiB: 8, completionTarget: 0.9, walRateGiBPerHour: 12});
+    const atSixty = getTuningDerived({timeoutMinutes: 60, maxWalGiB: 8, completionTarget: 0.9, walRateGiBPerHour: 12});
+    expect(atFifty.bindingTrigger).toBe('wal');
+    expect(atSixty.bindingTrigger).toBe('wal');
+    expect(atFifty.effectiveIntervalMinutes).toBeCloseTo(40, 12);
+    expect(atSixty.effectiveIntervalMinutes).toBeCloseTo(40, 12);
+  });
+
+  it('preserves both recovery-log calculations', () => {
+    expect(RECOVERY_EXAMPLES).toEqual([
+      {startLsn: '14/EB49CB90', endLsn: '15/6BEECAD8', bytes: 2_158_296_904, timeSeconds: 25.59, throughputMiB: 80.4},
+      {startLsn: '15/6BEECB78', endLsn: '16/83686B48', bytes: 4_688_814_032, timeSeconds: 69.08, throughputMiB: 64.7},
+    ]);
+  });
+
   it('keeps every scenario and system district uniquely addressable', () => {
     expect(new Set(SCENARIOS.map((scenario) => scenario.id)).size).toBe(SCENARIOS.length);
     expect(new Set(SYSTEM_NODES.map((node) => node.id)).size).toBe(SYSTEM_NODES.length);
@@ -33,11 +63,11 @@ describe('verified checkpoint content', () => {
   });
 
   it('keeps every modeled signal within a normalized boundary', () => {
-    const tuning = {timeoutMinutes: 30, maxWalGiB: 8, completionTarget: 0.9, illustrativeWalGiB: 6};
+    const tuning = {timeoutMinutes: 30, maxWalGiB: 8, completionTarget: 0.9, walRateGiBPerHour: 12};
     for (const scenario of SCENARIOS) {
       for (let step = 0; step <= 100; step += 1) {
-        const snapshot = getModelSnapshot(scenario.id, step / 100, tuning, BENCHMARK[3].walGb / BENCHMARK[0].walGb);
-        for (const signal of [snapshot.walIntensity, snapshot.fpiIntensity, snapshot.checkpointIntensity, snapshot.storageIntensity, snapshot.replayIntensity]) {
+        const snapshot = getModelSnapshot(scenario.id, step / 100, tuning, benchmarkRatios(3600));
+        for (const signal of [snapshot.walIntensity, snapshot.fpiIntensity, snapshot.checkpointIntensity, snapshot.storageIntensity, snapshot.replayIntensity, snapshot.standbyIntensity]) {
           expect(signal).toBeGreaterThanOrEqual(0);
           expect(signal).toBeLessThanOrEqual(1);
         }

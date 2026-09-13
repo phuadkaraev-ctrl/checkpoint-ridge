@@ -16,7 +16,7 @@ import {Bloom, EffectComposer, Vignette} from '@react-three/postprocessing';
 import * as THREE from 'three';
 import type {OrbitControls as OrbitControlsImpl} from 'three-stdlib';
 import {SYSTEM_NODES, getSystemNode, type ScenarioId, type SystemNodeId} from '../data';
-import type {ModelSnapshot} from '../simulation';
+import {getFpiSignal, type ModelSnapshot} from '../simulation';
 
 export type RenderQuality = 'low' | 'medium' | 'high';
 
@@ -95,6 +95,18 @@ const DistrictPlate = ({color, selected}: {color: string; selected: boolean}) =>
       transparent
       opacity={selected ? 0.92 : 0.26}
     />
+    {selected && (
+      <>
+        <mesh position={[0, 0.17, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[2.42, 2.62, 64]} />
+          <meshBasicMaterial color={color} toneMapped={false} transparent opacity={0.2} side={THREE.DoubleSide} />
+        </mesh>
+        <mesh position={[0, 1.9, 0]}>
+          <cylinderGeometry args={[0.018, 0.075, 3.5, 12]} />
+          <meshBasicMaterial color={color} toneMapped={false} transparent opacity={0.14} depthWrite={false} />
+        </mesh>
+      </>
+    )}
   </group>
 );
 
@@ -293,7 +305,7 @@ type RailProps = {
 };
 
 const DataRail = ({from, to, color, active, speed = 0.15, arch = 1.2}: RailProps) => {
-  const packet = useRef<THREE.Mesh>(null);
+  const packets = useRef<THREE.Group>(null);
   const curve = useMemo(() => {
     const start = new THREE.Vector3(...from).addScaledVector(UP, 0.48);
     const end = new THREE.Vector3(...to).addScaledVector(UP, 0.48);
@@ -303,38 +315,43 @@ const DataRail = ({from, to, color, active, speed = 0.15, arch = 1.2}: RailProps
   const points = useMemo(() => curve.getPoints(50), [curve]);
 
   useFrame(({clock}) => {
-    if (!packet.current || active < 0.08) return;
-    const t = (clock.elapsedTime * (speed + active * 0.24)) % 1;
-    packet.current.position.copy(curve.getPoint(t));
-    packet.current.scale.setScalar(0.58 + active * 0.54);
+    if (!packets.current || active < 0.08) return;
+    packets.current.children.forEach((packet, index) => {
+      const t = (clock.elapsedTime * (speed + active * 0.24) - index * 0.115 + 1) % 1;
+      packet.position.copy(curve.getPoint(t));
+      packet.scale.setScalar((0.66 + active * 0.46) * (1 - index * 0.15));
+    });
   });
 
   return (
     <group>
       <Line points={points} color={color} lineWidth={0.7 + active * 2.2} transparent opacity={0.11 + active * 0.62} />
-      <mesh ref={packet} visible={active > 0.08}>
-        <sphereGeometry args={[0.12, 12, 12]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
-        <pointLight color={color} intensity={1 + active * 3} distance={2.4} />
-      </mesh>
+      <group ref={packets} visible={active > 0.08}>
+        {[0, 1, 2].map((index) => (
+          <mesh key={index}>
+            <sphereGeometry args={[0.12, 12, 12]} />
+            <meshBasicMaterial color={color} toneMapped={false} transparent opacity={1 - index * 0.24} />
+            {index === 0 && <pointLight color={color} intensity={1 + active * 3} distance={2.4} />}
+          </mesh>
+        ))}
+      </group>
     </group>
   );
 };
 
-const spikeHeightAt = (t: number) => {
-  const cycle = (t * 3.1) % 1;
-  const saw = 1 - cycle;
-  const envelope = 0.45 + 0.55 * Math.sin(Math.min(1, t * 1.15) * Math.PI);
-  return 0.78 + saw * 3.15 * envelope;
-};
+const fpiHeightAt = (t: number, cycles: number) => 0.78 + getFpiSignal(t, cycles).fpi * 3.15;
 
-const FpiWave = ({visible, progress}: {visible: boolean; progress: number}) => {
+const FpiWave = ({visible, progress, cycles}: {visible: boolean; progress: number; cycles: number}) => {
   const goat = useRef<THREE.Group>(null);
   const texture = useTexture(`${ASSET_BASE}assets/goats/goat-jump.png`);
   const points = useMemo(() => Array.from({length: 100}, (_, index) => {
     const t = index / 99;
-    return new THREE.Vector3(-7 + t * 10.5, spikeHeightAt(t), -7.2);
-  }), []);
+    return new THREE.Vector3(-7 + t * 10.5, fpiHeightAt(t, cycles), -7.2);
+  }), [cycles]);
+  const checkpointMarkers = useMemo(
+    () => Array.from({length: cycles}, (_, index) => index / cycles),
+    [cycles],
+  );
 
   useEffect(() => {
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -344,7 +361,7 @@ const FpiWave = ({visible, progress}: {visible: boolean; progress: number}) => {
   useFrame(() => {
     if (!goat.current) return;
     const t = Math.min(0.995, Math.max(0, progress));
-    goat.current.position.set(-7 + t * 10.5, spikeHeightAt(t) + 0.9, -7.2);
+    goat.current.position.set(-7 + t * 10.5, fpiHeightAt(t, cycles) + 0.9, -7.2);
     goat.current.rotation.z = THREE.MathUtils.lerp(goat.current.rotation.z, -0.07 + Math.sin(t * 19) * 0.035, 0.1);
   });
 
@@ -353,6 +370,17 @@ const FpiWave = ({visible, progress}: {visible: boolean; progress: number}) => {
     <group>
       <Line points={points} color="#ffad42" lineWidth={2.4} transparent opacity={0.88} />
       <Line points={points.map((point) => point.clone().add(new THREE.Vector3(0, -0.12, 0)))} color="#f6fe54" lineWidth={0.8} transparent opacity={0.52} />
+      {checkpointMarkers.map((marker, index) => {
+        const x = -7 + marker * 10.5;
+        return (
+          <group key={marker}>
+            <Line points={[[x, 0.62, -7.2], [x, 4.45, -7.2]]} color="#ff6685" lineWidth={0.8} dashed dashSize={0.14} gapSize={0.1} transparent opacity={0.54} />
+            <Html position={[x, 0.45, -7.2]} center distanceFactor={15}>
+              <div className="checkpoint-marker">CP {index + 1}</div>
+            </Html>
+          </group>
+        );
+      })}
       <group ref={goat}>
         <sprite scale={[3.2, 2.15, 1]}>
           <spriteMaterial map={texture} transparent depthWrite={false} toneMapped={false} />
@@ -360,10 +388,48 @@ const FpiWave = ({visible, progress}: {visible: boolean; progress: number}) => {
         <pointLight color="#ffad42" intensity={3} distance={4} position={[0, -0.2, 0]} />
       </group>
       <Html position={[-1.9, 4.8, -7.2]} center distanceFactor={14}>
-        <div className="world-callout"><span>CONCEPTUAL</span> post-checkpoint FPI pressure</div>
+        <div className="world-callout"><span>CONCEPTUAL</span> synchronized FPI signal · {cycles} checkpoint {cycles === 1 ? 'cycle' : 'cycles'}</div>
       </Html>
     </group>
   );
+};
+
+const ScenarioGuides = ({scenario, snapshot}: {scenario: ScenarioId; snapshot: ModelSnapshot}) => {
+  if (scenario === 'evidence') {
+    return (
+      <Html position={[-4, 5.35, -3]} center distanceFactor={15}>
+        <div className="world-data-card measured-card">
+          <small>SELECTED RUN · VS 5 MIN</small>
+          <span><b>{Math.round(snapshot.walIntensity * 100)}%</b> WAL</span>
+          <span><b>{Math.round(snapshot.fpiIntensity * 100)}%</b> FPI</span>
+        </div>
+      </Html>
+    );
+  }
+  if (scenario === 'tune') {
+    return (
+      <Html position={[0, 5.65, 0]} center distanceFactor={15}>
+        <div className={`world-data-card tuning-card ${snapshot.phase.includes('WAL') ? 'risk' : ''}`}>
+          <small>DIRECTIONAL MODEL</small>
+          <strong>{snapshot.phase}</strong>
+          <span>{snapshot.phaseDetail}</span>
+        </div>
+      </Html>
+    );
+  }
+  if (scenario === 'recovery') {
+    return (
+      <>
+        <Html position={[2.2, 4.75, -3.9]} center distanceFactor={16}>
+          <div className="world-data-card recovery-card"><small>PRIMARY RESTART</small><strong>LOCAL WAL REPLAY</strong><span>redo point → data files</span></div>
+        </Html>
+        <Html position={[7.1, 4.65, -4]} center distanceFactor={16}>
+          <div className="world-data-card ha-card"><small>SEPARATE HA PATH</small><strong>STANDBY FAILOVER</strong><span>promotion, not crash recovery</span></div>
+        </Html>
+      </>
+    );
+  }
+  return null;
 };
 
 const AlpinePerimeter = ({quality}: {quality: RenderQuality}) => {
@@ -449,6 +515,7 @@ const World = (props: WorldCanvasProps) => {
   const nodePosition = (id: SystemNodeId) => getSystemNode(id).world;
   const showWave = scenario === 'fpi' || (scenario === 'cycle' && snapshot.goatVisible);
   const spikeProgress = scenario === 'cycle' ? Math.max(0, Math.min(1, (progress - 0.66) / 0.35)) : progress;
+  const waveCycles = scenario === 'fpi' ? 2 : 1;
   return (
     <>
       <PerspectiveCamera makeDefault fov={34} position={[20, 18.5, 26]} near={0.1} far={110} />
@@ -474,7 +541,13 @@ const World = (props: WorldCanvasProps) => {
       <DataRail from={nodePosition('buffers')} to={nodePosition('checkpointer')} color="#f6fe54" active={snapshot.checkpointIntensity} arch={1.45} />
       <DataRail from={nodePosition('checkpointer')} to={nodePosition('storage')} color="#56e3a2" active={snapshot.storageIntensity} arch={1.4} />
       <DataRail from={nodePosition('checkpointer')} to={nodePosition('pgcontrol')} color="#ff6685" active={snapshot.redoAdvanced ? 0.72 : 0.12} arch={1.15} />
-      <DataRail from={nodePosition('wal')} to={nodePosition('standby')} color="#b886ff" active={snapshot.replayIntensity} arch={2.45} speed={0.12} />
+      <DataRail from={nodePosition('wal')} to={nodePosition('standby')} color="#b886ff" active={snapshot.standbyIntensity} arch={2.45} speed={0.12} />
+      {scenario === 'recovery' && (
+        <>
+          <DataRail from={nodePosition('pgcontrol')} to={nodePosition('wal')} color="#ff6685" active={progress < 0.3 ? 0.92 : 0.24} arch={1.35} speed={0.11} />
+          <DataRail from={nodePosition('wal')} to={nodePosition('storage')} color="#56e3a2" active={snapshot.replayIntensity} arch={3.15} speed={0.16} />
+        </>
+      )}
 
       <ClientDistrict selected={selectedNode === 'clients'} onSelect={onSelectNode} />
       <BufferDistrict selected={selectedNode === 'buffers'} onSelect={onSelectNode} dirtyPages={snapshot.dirtyPages} />
@@ -482,8 +555,9 @@ const World = (props: WorldCanvasProps) => {
       <CheckpointerDistrict selected={selectedNode === 'checkpointer'} onSelect={onSelectNode} intensity={snapshot.checkpointIntensity} />
       <StorageDistrict selected={selectedNode === 'storage'} onSelect={onSelectNode} intensity={snapshot.storageIntensity} />
       <PgControlDistrict selected={selectedNode === 'pgcontrol'} onSelect={onSelectNode} advanced={snapshot.redoAdvanced} />
-      <StandbyDistrict selected={selectedNode === 'standby'} onSelect={onSelectNode} intensity={snapshot.replayIntensity} />
-      <FpiWave visible={showWave} progress={spikeProgress} />
+      <StandbyDistrict selected={selectedNode === 'standby'} onSelect={onSelectNode} intensity={snapshot.standbyIntensity} />
+      <FpiWave visible={showWave} progress={spikeProgress} cycles={waveCycles} />
+      <ScenarioGuides scenario={scenario} snapshot={snapshot} />
 
       {quality !== 'low' && <Sparkles count={quality === 'high' ? 120 : 70} scale={[31, 10, 23]} size={1.2} speed={0.16} opacity={0.16} color="#b9c6ff" />}
       {quality !== 'low' && <ContactShadows position={[0, -0.04, 0]} opacity={0.45} scale={32} blur={2.6} far={12} resolution={quality === 'high' ? 1024 : 512} color="#02050d" />}

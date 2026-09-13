@@ -12,7 +12,7 @@ import {
   type ScenarioId,
   type SystemNodeId,
 } from './data';
-import {benchmarkRatio, getModelSnapshot, type TuningInputs} from './simulation';
+import {benchmarkRatios, getModelSnapshot, type TuningInputs} from './simulation';
 
 const DURATION_BY_SCENARIO: Record<ScenarioId, number> = {
   overview: 34,
@@ -54,12 +54,12 @@ export const App = () => {
   const [inspectorOpen, setInspectorOpen] = useState(() => typeof window === 'undefined' || window.innerWidth >= 900);
   const [cameraResetToken, setCameraResetToken] = useState(0);
   const [selectedGap, setSelectedGap] = useState(3600);
-  const [tuning, setTuning] = useState<TuningInputs>({timeoutMinutes: 30, maxWalGiB: 8, completionTarget: 0.9, illustrativeWalGiB: 6});
+  const [tuning, setTuning] = useState<TuningInputs>({timeoutMinutes: 30, maxWalGiB: 8, completionTarget: 0.9, walRateGiBPerHour: 12});
   const lastFrame = useRef<number | null>(null);
 
   const scenario = useMemo(() => getScenario(scenarioId), [scenarioId]);
   const snapshot = useMemo(
-    () => getModelSnapshot(scenarioId, progress, tuning, benchmarkRatio(selectedGap)),
+    () => getModelSnapshot(scenarioId, progress, tuning, benchmarkRatios(selectedGap)),
     [progress, scenarioId, selectedGap, tuning],
   );
 
@@ -89,7 +89,7 @@ export const App = () => {
     if (scenarioId === 'cycle') next = getCycleStage(progress).focus;
     if (scenarioId === 'fpi' || scenarioId === 'evidence') next = 'wal';
     if (scenarioId === 'tune') next = 'checkpointer';
-    if (scenarioId === 'recovery') next = progress < 0.3 ? 'pgcontrol' : progress < 0.76 ? 'wal' : 'standby';
+    if (scenarioId === 'recovery') next = progress < 0.26 ? 'pgcontrol' : progress < 0.78 ? 'wal' : 'storage';
     if (next && next !== selectedNode) setSelectedNode(next);
   }, [playing, progress, scenarioId, selectedNode]);
 
@@ -126,7 +126,7 @@ export const App = () => {
 
   return (
     <div
-      className="sim-app"
+      className={`sim-app scenario-${scenarioId}`}
       style={{'--mountain-image': `url("${ASSET_BASE}assets/percona-mountains.webp")`} as CSSProperties}
     >
       <div className="mountain-backdrop" aria-hidden="true" />
@@ -138,7 +138,7 @@ export const App = () => {
           <WorldCanvas scenario={scenarioId} selectedNode={selectedNode} snapshot={snapshot} progress={progress} quality={quality} cameraResetToken={cameraResetToken} onSelectNode={chooseNode} />
         </Suspense>
         <NarrativeCard scenario={scenario} progress={progress} snapshot={snapshot} />
-        <Minimap selectedNode={selectedNode} onSelectNode={chooseNode} />
+        <Minimap scenario={scenarioId} selectedNode={selectedNode} onSelectNode={chooseNode} />
         <div className="model-key" aria-label="Visual data key">
           <span><i className="concept-dot" />Conceptual motion</span>
           <span><i className="measured-dot" />Measured in inspector</span>

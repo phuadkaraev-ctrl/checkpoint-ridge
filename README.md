@@ -7,11 +7,11 @@ The experience was built for Percona Community and follows the technical sequenc
 ## Experience
 
 - Orbit, pan, and zoom through seven clickable PostgreSQL districts.
-- Run a guided checkpoint from dirty buffers through paced writes, `fsync()`, the redo boundary, and the post-checkpoint FPI wave.
+- Run a guided checkpoint from dirty buffers through paced writes, file synchronization, the redo boundary, and the post-checkpoint FPI wave.
 - Follow the jumping goat along the same conceptual spike line it explains.
 - Compare the four exact `pgbench` WAL and `wal_fpi` observations.
 - Explore `checkpoint_timeout`, `max_wal_size`, and `checkpoint_completion_target` in a clearly labeled directional model.
-- Walk the recovery ground and distinguish checkpoint interval from WAL replay time.
+- Walk the recovery ground and distinguish local crash recovery from the separate standby-failover path.
 - Use the version-aware monitoring checklist and continue into the full post or Percona Community.
 
 ## Evidence boundary

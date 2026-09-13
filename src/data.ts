@@ -6,6 +6,12 @@ export type ScenarioId =
   | 'tune'
   | 'recovery';
 
+export type EvidenceClass =
+  | 'Concept'
+  | 'Measured'
+  | 'Directional model'
+  | 'Observed + concept';
+
 export type SystemNodeId =
   | 'clients'
   | 'buffers'
@@ -57,7 +63,7 @@ export const CYCLE_STAGES: readonly CycleStage[] = [
     end: 0.2,
     kicker: '01 · DIRTY PAGES ACCUMULATE',
     title: 'Transactions keep changing pages in memory.',
-    body: 'A steady workload modifies pages in shared_buffers. Those data pages do not need to reach storage at every commit.',
+    body: 'A steady workload modifies pages in shared_buffers. WAL provides the durability path, so those data pages do not need to reach storage at every commit.',
     detail: 'Dirty pages may also be written earlier by the background writer or buffer eviction.',
     focus: 'buffers',
   },
@@ -77,8 +83,8 @@ export const CYCLE_STAGES: readonly CycleStage[] = [
     end: 0.58,
     kicker: '03 · FILES ARE SYNCHRONIZED',
     title: 'The durability boundary reaches storage.',
-    body: 'PostgreSQL calls fsync() on files written during the checkpoint before completing it.',
-    detail: 'The page-write phase and the final synchronization phase are separate here on purpose.',
+    body: 'PostgreSQL synchronizes files written during the checkpoint to durable storage before completing it.',
+    detail: 'The paced page-write phase and final file-synchronization phase are shown separately on purpose.',
     focus: 'storage',
   },
   {
@@ -86,9 +92,9 @@ export const CYCLE_STAGES: readonly CycleStage[] = [
     start: 0.58,
     end: 0.66,
     kicker: '04 · REDO MOVES FORWARD',
-    title: 'A new recovery starting point is recorded.',
-    body: 'The redo location in global/pg_control advances. WAL that crash recovery no longer needs becomes eligible for recycling.',
-    detail: 'Archiving, standbys, replication slots, and retention settings may still require older WAL.',
+    title: 'The recovery boundary moves forward.',
+    body: 'A checkpoint record in WAL and updated checkpoint information in global/pg_control identify the new recovery boundary.',
+    detail: 'Older WAL may now be recyclable, but archiving, standbys, replication slots, backups, and retention settings can still require it.',
     focus: 'pgcontrol',
   },
   {
@@ -121,7 +127,7 @@ export type Scenario = {
   title: string;
   body: string;
   boundary: string;
-  evidence: 'Concept' | 'Measured' | 'Directional model';
+  evidence: EvidenceClass;
   focus: SystemNodeId;
   autoPlay: boolean;
 };
@@ -145,8 +151,8 @@ export const SCENARIOS: readonly Scenario[] = [
     tab: 'Checkpoint path',
     eyebrow: 'GUIDED SYSTEM RUN',
     title: 'Follow one checkpoint from dirty memory to a new redo boundary.',
-    body: 'The camera moves through the actual sequence: dirty pages, paced writes, fsync(), pg_control, then the post-checkpoint FPI wave.',
-    boundary: 'Animations show sequence and direction, not sampled production telemetry.',
+    body: 'The camera follows a simplified technical sequence: dirty pages, paced writes, file synchronization, the recovery boundary, then the FPI wave.',
+    boundary: 'This sequence explains the mechanism but omits lower-level internals. Its signals are not production telemetry.',
     evidence: 'Concept',
     focus: 'buffers',
     autoPlay: true,
@@ -168,8 +174,8 @@ export const SCENARIOS: readonly Scenario[] = [
     index: '03',
     tab: 'Measured test',
     eyebrow: 'FIXED PGBENCH WORKLOAD',
-    title: 'Hold the workload steady. Change only the checkpoint gap.',
-    body: 'Two connections each ran 1.11 million transactions. The four published runs below are exact measured observations.',
+    title: 'One fixed pgbench command. Four configured checkpoint gaps.',
+    body: 'Two clients each ran 1.11 million transactions. The interface preserves the four WAL and wal_fpi observations reported by the author.',
     boundary: 'Do not interpolate these results to another system. Workload and schema determine the savings.',
     evidence: 'Measured',
     focus: 'wal',
@@ -194,8 +200,8 @@ export const SCENARIOS: readonly Scenario[] = [
     eyebrow: 'THE COMMON FEAR',
     title: 'A 60-minute checkpoint gap does not mean 60-minute recovery.',
     body: 'Recovery depends on the WAL that must be replayed and the speed at which PostgreSQL can apply it. Longer gaps can increase replay work, while tuning can also reduce WAL generation.',
-    boundary: 'Recovery examples are specific observations, not a promise for another environment.',
-    evidence: 'Measured',
+    boundary: 'The two log examples are observed. The replay animation and HA branch are conceptual and do not predict recovery time.',
+    evidence: 'Observed + concept',
     focus: 'pgcontrol',
     autoPlay: true,
   },
@@ -213,18 +219,38 @@ export type SystemNode = {
 };
 
 export const SYSTEM_NODES: readonly SystemNode[] = [
-  {id: 'clients', short: 'CLIENTS', label: 'Client backends', role: 'Generate transactions and change table pages.', detail: 'Commits make WAL durable; modified data pages can remain dirty in shared_buffers.', color: '#43d9ff', world: [-6, 0, 3], map: [28, 77]},
+  {id: 'clients', short: 'CLIENTS', label: 'Client backends', role: 'Generate transactions and change table pages.', detail: 'With the default synchronous_commit behavior, commits wait for local WAL flush. Modified data pages can remain dirty in shared_buffers.', color: '#43d9ff', world: [-6, 0, 3], map: [28, 77]},
   {id: 'buffers', short: 'BUFFER POOL', label: 'shared_buffers', role: 'Holds cached pages, including modified dirty pages.', detail: 'Checkpoint processing identifies dirty pages here, but checkpoints are not the only way a dirty page reaches storage.', color: '#7c63ff', world: [-3, 0, 1.5], map: [45, 51]},
   {id: 'wal', short: 'WAL', label: 'WAL ridge', role: 'Records changes needed for durability and recovery.', detail: 'With full_page_writes enabled, the first modification of a page after a checkpoint includes a full-page image.', color: '#ffad42', world: [-4, 0, -3], map: [32, 24]},
   {id: 'checkpointer', short: 'CHECKPOINTER', label: 'Checkpointer', role: 'Coordinates checkpoint writes and completion.', detail: 'Writes can be spread across the completion window before final synchronization.', color: '#f6fe54', world: [0, 0, 0], map: [58, 45]},
   {id: 'storage', short: 'STORAGE', label: 'Data storage', role: 'Receives written data pages and file synchronization.', detail: 'I/O capacity and latency affect how smoothly checkpoint work can be absorbed.', color: '#56e3a2', world: [4, 0, 2.5], map: [75, 67]},
-  {id: 'pgcontrol', short: 'PG_CONTROL', label: 'global/pg_control', role: 'Records the redo location for the new checkpoint.', detail: 'Crash recovery can start from this boundary and replay WAL generated after it.', color: '#ff6685', world: [3.5, 0, -3], map: [74, 28]},
+  {id: 'pgcontrol', short: 'PG_CONTROL', label: 'global/pg_control', role: 'Stores control information for the latest checkpoint.', detail: 'Together with the checkpoint record in WAL, it identifies the redo point from which crash recovery begins.', color: '#ff6685', world: [3.5, 0, -3], map: [74, 28]},
   {id: 'standby', short: 'STANDBY', label: 'Physical standby', role: 'Receives and replays WAL from the primary.', detail: 'Lower WAL volume can reduce pressure on archiving, storage, replication, and network bandwidth.', color: '#b886ff', world: [6.5, 0, -4], map: [88, 16]},
 ] as const;
 
-export const RECOVERY_EXAMPLES = [
-  {wal: '2,158,296,904 bytes replayed', time: '25.59 s', detail: '≈80.4 MiB/s, derived from the displayed LSNs and elapsed time'},
-  {wal: 'second recovery sample', time: '69.08 s', detail: 'A second elapsed-time observation from the same test context'},
+export type RecoveryExample = {
+  startLsn: string;
+  endLsn: string;
+  bytes: number;
+  timeSeconds: number;
+  throughputMiB: number;
+};
+
+export const RECOVERY_EXAMPLES: readonly RecoveryExample[] = [
+  {
+    startLsn: '14/EB49CB90',
+    endLsn: '15/6BEECAD8',
+    bytes: 2_158_296_904,
+    timeSeconds: 25.59,
+    throughputMiB: 80.4,
+  },
+  {
+    startLsn: '15/6BEECB78',
+    endLsn: '16/83686B48',
+    bytes: 4_688_814_032,
+    timeSeconds: 69.08,
+    throughputMiB: 64.7,
+  },
 ] as const;
 
 export const getCycleStage = (progress: number): CycleStage =>
@@ -240,3 +266,5 @@ export const formatInteger = (value: number) => new Intl.NumberFormat('en-US').f
 
 export const reductionFromBaseline = (value: number, baseline: number) =>
   Math.round((1 - value / baseline) * 1000) / 10;
+
+export const ratioToBaseline = (value: number, baseline: number) => value / baseline;

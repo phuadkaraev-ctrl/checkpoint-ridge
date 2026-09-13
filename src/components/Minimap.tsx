@@ -1,22 +1,26 @@
-import {SYSTEM_NODES, type SystemNodeId} from '../data';
+import {SYSTEM_NODES, type ScenarioId, type SystemNodeId} from '../data';
 
-type MinimapProps = {selectedNode: SystemNodeId; onSelectNode: (node: SystemNodeId) => void};
+type MinimapProps = {scenario: ScenarioId; selectedNode: SystemNodeId; onSelectNode: (node: SystemNodeId) => void};
 
 const LINKS: readonly [SystemNodeId, SystemNodeId][] = [
   ['clients', 'buffers'], ['clients', 'wal'], ['buffers', 'checkpointer'], ['checkpointer', 'storage'],
   ['checkpointer', 'pgcontrol'], ['wal', 'standby'],
 ];
 
-export const Minimap = ({selectedNode, onSelectNode}: MinimapProps) => {
+const RECOVERY_LINKS: readonly [SystemNodeId, SystemNodeId][] = [['pgcontrol', 'wal'], ['wal', 'storage']];
+
+export const Minimap = ({scenario, selectedNode, onSelectNode}: MinimapProps) => {
   const byId = (id: SystemNodeId) => SYSTEM_NODES.find((node) => node.id === id) ?? SYSTEM_NODES[0];
+  const links = scenario === 'recovery' ? [...LINKS, ...RECOVERY_LINKS] : LINKS;
   return (
     <aside className="minimap" aria-label="Checkpoint Ridge map">
       <div className="minimap-heading"><span>N</span><strong>SYSTEM MAP</strong><small>ORBIT</small></div>
       <svg viewBox="0 0 112 96" role="img" aria-label="Clickable map of PostgreSQL system districts">
         <path className="mini-island" d="M8 54 24 21l37-12 41 15 4 43-27 22-49-5Z" />
-        {LINKS.map(([from, to]) => {
+        {links.map(([from, to]) => {
           const first = byId(from); const second = byId(to);
-          return <line key={`${from}-${to}`} x1={first.map[0]} y1={first.map[1]} x2={second.map[0]} y2={second.map[1]} className="mini-link" />;
+          const isRecoveryLink = scenario === 'recovery' && RECOVERY_LINKS.some(([start, end]) => start === from && end === to);
+          return <line key={`${from}-${to}`} x1={first.map[0]} y1={first.map[1]} x2={second.map[0]} y2={second.map[1]} className={`mini-link ${isRecoveryLink ? 'scenario-link' : ''}`} />;
         })}
         {SYSTEM_NODES.map((node) => (
           <g

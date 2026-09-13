@@ -9,7 +9,7 @@ import {
   type Scenario,
   type SystemNodeId,
 } from '../data';
-import type {ModelSnapshot, TuningInputs} from '../simulation';
+import {getTuningDerived, type ModelSnapshot, type TuningInputs} from '../simulation';
 
 type InspectorPanelProps = {
   open: boolean;
@@ -50,7 +50,7 @@ const CycleModule = ({snapshot}: {snapshot: ModelSnapshot}) => (
     <Meter value={snapshot.checkpointIntensity} color="#f6fe54" label="CHECKPOINT" />
     <Meter value={snapshot.storageIntensity} color="#56e3a2" label="STORAGE I/O" />
     <Meter value={snapshot.fpiIntensity} color="#ffad42" label="FPI PRESSURE" />
-    <div className="info-note"><i>i</i><p>A checkpoint establishes a new recovery boundary. Data-page writes and WAL records are separate streams; the first post-checkpoint page change can add an FPI to WAL.</p></div>
+    <div className="info-note"><i>i</i><p>A checkpoint synchronizes dirty data pages, writes a checkpoint record to WAL, and updates checkpoint information in <code>global/pg_control</code>. Data-page writes and WAL records remain separate streams.</p></div>
   </div>
 );
 
@@ -58,11 +58,12 @@ const FpiModule = ({snapshot}: {snapshot: ModelSnapshot}) => (
   <div className="inspector-module fpi-module">
     <span className="module-label">THE PROTECTION MECHANISM</span>
     <div className="code-flow">
-      <code>CHECKPOINT</code><span>→</span><code>FIRST PAGE CHANGE</code><span>→</span><code>FPI IN WAL</code>
+      <code>NEW CHECKPOINT CYCLE</code><span>→</span><code>FIRST PAGE CHANGE</code><span>→</span><code>FPI IN WAL</code>
     </div>
     <p>With <code>full_page_writes</code> enabled, PostgreSQL logs the whole page on its first change after a checkpoint. This lets recovery repair a page torn by a partial write.</p>
+    <div className="later-change"><span>THEN</span><code>LATER CHANGE TO THE SAME PAGE</code><b>regular WAL record; no repeated FPI for that page in the same checkpoint cycle</b></div>
     <Meter value={snapshot.fpiIntensity} color="#ffad42" label="CONCEPTUAL FPI WAVE" />
-    <small className="plain-boundary">The jumping goat follows the exact height of the conceptual line. The line is not a production trace.</small>
+    <small className="plain-boundary">The goat, line, meter, and HUD share one normalized signal. It illustrates two checkpoint cycles, not production telemetry.</small>
   </div>
 );
 
@@ -75,35 +76,40 @@ const EvidenceModule = ({selectedGap, onGapChange}: {selectedGap: number; onGapC
     <div className="inspector-module evidence-module">
       <div className="module-heading"><span className="module-label">EXACT PUBLISHED OBSERVATIONS</span><span className="measured-tag">MEASURED</span></div>
       <p className="module-intro">Fixed <code>pgbench</code> workload · 2 connections · 1.11 million transactions each</p>
+      <div className="benchmark-legend"><span><i className="wal-key" />WAL</span><span><i className="fpi-key" />FPI count</span><small>relative to 5 min</small></div>
       <div className="benchmark-picker">
         {BENCHMARK.map((point) => (
           <button key={point.gapSeconds} type="button" className={point.gapSeconds === selectedGap ? 'active' : ''} onClick={() => onGapChange(point.gapSeconds)}>
             <small>{point.shortLabel}</small>
-            <span><i style={{height: `${18 + (point.walGb / baseline.walGb) * 48}px`}} /> </span>
+            <span className="bar-pair" aria-hidden="true">
+              <i className="wal-bar" style={{height: `${14 + (point.walGb / baseline.walGb) * 48}px`}} />
+              <i className="fpi-bar" style={{height: `${14 + (point.walFpi / baseline.walFpi) * 48}px`}} />
+            </span>
           </button>
         ))}
       </div>
       <div className="evidence-result">
-        <div><small>WAL GENERATED</small><strong>{selected.walGb.toFixed(2)} <em>GB</em></strong><span>{selected === baseline ? 'baseline run' : `${walReduction}% below 5 min`}</span></div>
+        <div><small>WAL GENERATED</small><strong className="exact-wal">{String(selected.walGb)} <em>GB</em></strong><span>{selected === baseline ? 'baseline run' : `${walReduction}% below 5 min`}</span></div>
         <div><small>FULL-PAGE IMAGES</small><strong>{formatInteger(selected.walFpi)}</strong><span>{selected === baseline ? 'baseline run' : `${fpiReduction}% below 5 min`}</span></div>
       </div>
-      {selected.gapSeconds === 3600 && <div className="result-callout"><strong>≈5.9× less WAL</strong><span>and ≈9.1× fewer FPIs than the five-minute run.</span></div>}
-      <div className="repeated-write-note"><strong>There is another saving.</strong><p>With frequent checkpoints, the same buffer page may be flushed, modified, and flushed again. More time between checkpoints can avoid repeated writes when memory pressure does not force the page out first.</p></div>
-      <p className="source-footnote">Four separate observations. Workload and schema determine whether another system behaves similarly.</p>
+      {selected.gapSeconds === 3600 && <div className="result-callout"><strong>83% less WAL</strong><span>and 89% fewer FPIs than the five-minute observation.</span></div>}
+      <div className="repeated-write-note"><strong>Potential data-write saving</strong><p>With frequent checkpoints, the same buffer page may be flushed, modified, and flushed again. More time can avoid repeated writes when memory pressure does not force the page out first.</p></div>
+      <p className="source-footnote">These are four published observations, not a predictive curve. Treat them as workload-specific because the surrounding environment is not reproduced here.</p>
     </div>
   );
 };
 
 const TuneModule = ({tuning, onTuningChange}: {tuning: TuningInputs; onTuningChange: (inputs: TuningInputs) => void}) => {
   const update = <Key extends keyof TuningInputs,>(key: Key, value: TuningInputs[Key]) => onTuningChange({...tuning, [key]: value});
-  const hasHeadroom = tuning.maxWalGiB >= tuning.illustrativeWalGiB;
+  const derived = getTuningDerived(tuning);
+  const walBinds = derived.bindingTrigger === 'wal';
   return (
     <div className="inspector-module tuning-module">
       <span className="module-label">DIRECTIONAL CONTROL MODEL</span>
       <label className="parameter-control">
         <span><code>checkpoint_timeout</code><strong>{tuning.timeoutMinutes} min</strong></span>
         <input type="range" min="5" max="60" step="5" value={tuning.timeoutMinutes} onChange={(event) => update('timeoutMinutes', Number(event.target.value))} />
-        <small>Maximum planned time between automatic checkpoints. Thirty minutes or more can be a starting point with physical standbys, but must be validated. An idle timed checkpoint may be skipped.</small>
+        <small>Maximum planned time between automatic checkpoints. The source author uses 30 minutes as a production starting point with physical standbys; it is not a universal recommendation. Idle timed checkpoints may be skipped.</small>
       </label>
       <label className="parameter-control">
         <span><code>max_wal_size</code><strong>{tuning.maxWalGiB} GiB</strong></span>
@@ -112,16 +118,27 @@ const TuneModule = ({tuning, onTuningChange}: {tuning: TuningInputs; onTuningCha
       </label>
       <label className="parameter-control">
         <span><code>checkpoint_completion_target</code><strong>{tuning.completionTarget.toFixed(2)}</strong></span>
-        <input type="range" min="0.5" max="0.95" step="0.05" value={tuning.completionTarget} onChange={(event) => update('completionTarget', Number(event.target.value))} />
+        <input type="range" min="0.5" max="0.9" step="0.05" value={tuning.completionTarget} onChange={(event) => update('completionTarget', Number(event.target.value))} />
         <small>The default and generally recommended value is 0.9, spreading work across about 90% of the interval.</small>
       </label>
       <label className="parameter-control secondary-control">
-        <span><span>Illustrative WAL between checkpoints</span><strong>{tuning.illustrativeWalGiB} GiB</strong></span>
-        <input type="range" min="1" max="18" step="1" value={tuning.illustrativeWalGiB} onChange={(event) => update('illustrativeWalGiB', Number(event.target.value))} />
+        <span><span>Illustrative WAL generation rate</span><strong>{tuning.walRateGiBPerHour} GiB/h</strong></span>
+        <input type="range" min="2" max="36" step="1" value={tuning.walRateGiBPerHour} onChange={(event) => update('walRateGiBPerHour', Number(event.target.value))} />
+        <small>User-supplied directional input, not a measurement or capacity recommendation.</small>
       </label>
-      <div className={`headroom-card ${hasHeadroom ? 'safe' : 'risk'}`}>
+      <div className="trigger-map" aria-label="Modeled automatic checkpoint trigger">
+        <div className={derived.bindingTrigger === 'timeout' ? 'binding' : ''}><small>TIME TRIGGER</small><strong>{tuning.timeoutMinutes} min</strong></div>
+        <span>FIRST OF</span>
+        <div className={derived.bindingTrigger === 'wal' ? 'binding' : ''}><small>SOFT WAL TARGET</small><strong>≈{Math.round(derived.walTriggerMinutes)} min</strong></div>
+      </div>
+      <div className={`headroom-card ${walBinds ? 'risk' : 'safe'}`}>
         <i />
-        <span><strong>{hasHeadroom ? 'Directional headroom' : 'Early-checkpoint pressure'}</strong><small>{hasHeadroom ? 'Selected soft WAL target exceeds the illustrative volume.' : 'Illustrative WAL exceeds the selected soft target.'}</small></span>
+        <span>
+          <strong>{walBinds ? 'WAL trigger binds first' : 'Timeout trigger binds first'}</strong>
+          <small>{walBinds
+            ? `At the illustrative rate, the soft target is reached before ${tuning.timeoutMinutes} minutes; extending timeout alone no longer extends the modeled interval.`
+            : `Projected WAL over ${tuning.timeoutMinutes} minutes is ${derived.projectedWalGiB.toFixed(1)} GiB, leaving ${Math.max(0, derived.headroomGiB).toFixed(1)} GiB of directional headroom.`}</small>
+        </span>
       </div>
     </div>
   );
@@ -129,13 +146,25 @@ const TuneModule = ({tuning, onTuningChange}: {tuning: TuningInputs; onTuningCha
 
 const RecoveryModule = ({progress}: {progress: number}) => (
   <div className="inspector-module recovery-module">
-    <span className="module-label">RECOVERY IS WAL WORK, NOT WALL TIME</span>
-    <div className="recovery-equation"><span>replay work</span><b>÷</b><span>replay throughput</span><b>=</b><span>recovery time</span></div>
+    <div className="module-heading"><span className="module-label">RECOVERY IS WAL WORK, NOT CHECKPOINT WALL TIME</span><span className="mixed-tag">OBSERVED + CONCEPT</span></div>
+    <div className="recovery-equation"><span>WAL replay work</span><b>÷</b><span>effective throughput</span><b>≈</b><span>recovery time</span></div>
     <div className="recovery-track"><i style={{width: `${Math.min(100, progress * 111)}%`}} /><span style={{left: `${Math.min(96, progress * 100)}%`}} /></div>
-    <div className="recovery-observations">
-      {RECOVERY_EXAMPLES.map((item) => <div key={item.wal}><strong>{item.time}</strong><span>{item.wal}</span><small>{item.detail}</small></div>)}
+    <div className="recovery-branches">
+      <div className="primary-branch"><small>PRIMARY RESTART</small><strong><code>pg_control</code> + checkpoint record</strong><i>→</i><strong>local WAL replay</strong></div>
+      <div className="ha-branch"><small>SEPARATE HA PATH</small><strong>promote a healthy standby</strong><span>does not wait for the failed primary to recover</span></div>
     </div>
-    <div className="info-note"><i>HA</i><p>With a healthy standby and an HA solution such as Patroni, applications can fail over without waiting for the failed primary to finish crash recovery.</p></div>
+    <div className="recovery-observations">
+      {RECOVERY_EXAMPLES.map((item, index) => (
+        <div key={item.startLsn}>
+          <div className="observation-head"><small>LOG {index + 1}</small><strong>{item.timeSeconds.toFixed(2)} s</strong></div>
+          <code>{item.startLsn} → {item.endLsn}</code>
+          <span>{formatInteger(item.bytes)} bytes replayed</span>
+          <b>≈{item.throughputMiB.toFixed(1)} MiB/s</b>
+        </div>
+      ))}
+    </div>
+    <div className="source-correction"><i>NOTE</i><p>For consistency, Log 1 uses the 25.59 s elapsed value printed in the source log block. Throughput is recalculated from that value and the published LSNs.</p></div>
+    <div className="info-note"><i>HA</i><p>Patroni or another HA system can promote a healthy standby. That failover path is distinct from crash recovery on the failed primary.</p></div>
   </div>
 );
 
@@ -144,6 +173,7 @@ const MonitoringModule = () => (
     <span className="module-label">VERIFY AFTER TUNING</span>
     <ul>
       <li><code>log_checkpoints</code><span>Timing, write and sync duration, WAL distance</span></li>
+      <li><code>checkpoint_warning</code><span>Flags checkpoints occurring too frequently because of WAL pressure</span></li>
       <li><code>pg_stat_wal</code><span>Cumulative WAL statistics · PostgreSQL 14+</span></li>
       <li><code>pg_stat_bgwriter</code><span>Checkpoint statistics through PostgreSQL 16</span></li>
       <li><code>pg_stat_checkpointer</code><span>Checkpoint statistics from PostgreSQL 17</span></li>
