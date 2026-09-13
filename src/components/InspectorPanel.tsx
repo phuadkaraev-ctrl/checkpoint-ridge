@@ -19,6 +19,7 @@ type InspectorPanelProps = {
   tuning: TuningInputs;
   snapshot: ModelSnapshot;
   progress: number;
+  threeDEnabled: boolean;
   onClose: () => void;
   onOpen: () => void;
   onGapChange: (gapSeconds: number) => void;
@@ -33,11 +34,11 @@ const Meter = ({value, color, label}: {value: number; color: string; label: stri
   </div>
 );
 
-const OverviewModule = () => (
+const OverviewModule = ({threeDEnabled}: {threeDEnabled: boolean}) => (
   <div className="inspector-module overview-module">
     <span className="module-label">HOW TO EXPLORE</span>
     <div className="instruction-grid">
-      <div><b>01</b><span><strong>Orbit the system</strong><small>Drag the landscape and zoom into a district.</small></span></div>
+      <div><b>01</b><span><strong>{threeDEnabled ? 'Orbit the system' : 'Read the system map'}</strong><small>{threeDEnabled ? 'Drag the landscape and zoom into a district.' : 'Follow the directional rails and select any district.'}</small></span></div>
       <div><b>02</b><span><strong>Run the path</strong><small>Use the scenario rail to follow one technical idea.</small></span></div>
       <div><b>03</b><span><strong>Test the controls</strong><small>Separate measured evidence from modeled direction.</small></span></div>
     </div>
@@ -197,7 +198,7 @@ const CommunityCta = () => (
   </div>
 );
 
-export const InspectorPanel = ({open, scenario, selectedNode, selectedGap, tuning, snapshot, progress, onClose, onOpen, onGapChange, onTuningChange}: InspectorPanelProps) => {
+export const InspectorPanel = ({open, scenario, selectedNode, selectedGap, tuning, snapshot, progress, threeDEnabled, onClose, onOpen, onGapChange, onTuningChange}: InspectorPanelProps) => {
   const node = useMemo(() => getSystemNode(selectedNode), [selectedNode]);
   return (
     <>
@@ -212,7 +213,7 @@ export const InspectorPanel = ({open, scenario, selectedNode, selectedGap, tunin
             <span className="node-pulse" /><div><small>SELECTED DISTRICT</small><h2>{node.label}</h2><p>{node.role}</p></div>
           </div>
           <p className="node-detail">{node.detail}</p>
-          {scenario.id === 'overview' && <OverviewModule />}
+          {scenario.id === 'overview' && <OverviewModule threeDEnabled={threeDEnabled} />}
           {scenario.id === 'cycle' && <CycleModule snapshot={snapshot} />}
           {scenario.id === 'fpi' && <FpiModule snapshot={snapshot} />}
           {scenario.id === 'evidence' && <EvidenceModule selectedGap={selectedGap} onGapChange={onGapChange} />}

@@ -12,15 +12,17 @@ The experience was built for Percona Community and follows the technical sequenc
 - Compare the four exact `pgbench` WAL and `wal_fpi` observations.
 - Explore `checkpoint_timeout`, `max_wal_size`, and `checkpoint_completion_target` in a clearly labeled directional model.
 - Walk the recovery ground and distinguish local crash recovery from the separate standby-failover path.
+- Keep the full system map and scenario controls available in a labeled 2D compatibility view when WebGL is unavailable.
 - Use the version-aware monitoring checklist and continue into the full post or Percona Community.
 
 ## Evidence boundary
 
-Checkpoint Ridge distinguishes three classes of information directly in the interface:
+Checkpoint Ridge distinguishes four classes of information directly in the interface:
 
 - **Measured:** Exact values from the four published test runs.
 - **Concept:** Time-compressed mechanism and pressure animations with no measured axis.
 - **Directional model:** Tuning controls that explain relationships without predicting another system.
+- **Observed + concept:** Published recovery-log observations paired with a clearly separated explanatory animation.
 
 Read [docs/TECHNICAL_ACCURACY.md](docs/TECHNICAL_ACCURACY.md) for the complete claim boundary.
 
@@ -48,6 +50,7 @@ The production build is written to `dist/`. The GitHub Pages workflow tests and 
 ```text
 src/
   components/WorldCanvas.tsx   3D districts, paths, camera and goat wave
+  components/WorldFallback.tsx Interactive 2D compatibility map
   components/                  HUD, inspector, minimap and scenario rail
   data.ts                      Verified facts, exact measurements and copy
   simulation.ts                Bounded conceptual/directional model state

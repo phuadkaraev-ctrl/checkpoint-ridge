@@ -1,9 +1,10 @@
-import {lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties} from 'react';
+import {Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode} from 'react';
 import {TopBar} from './components/TopBar';
 import {NarrativeCard} from './components/NarrativeCard';
 import {Minimap} from './components/Minimap';
 import {ScenarioRail} from './components/ScenarioRail';
 import {InspectorPanel} from './components/InspectorPanel';
+import {WorldFallback} from './components/WorldFallback';
 import type {RenderQuality} from './components/WorldCanvas';
 import {
   BENCHMARK,
@@ -25,6 +26,34 @@ const DURATION_BY_SCENARIO: Record<ScenarioId, number> = {
 
 const ASSET_BASE = import.meta.env.BASE_URL;
 const WorldCanvas = lazy(() => import('./components/WorldCanvas').then((module) => ({default: module.WorldCanvas})));
+
+const canUseWebGL = () => {
+  if (typeof document === 'undefined') return false;
+  try {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
+    context?.getExtension('WEBGL_lose_context')?.loseContext();
+    return Boolean(context);
+  } catch {
+    return false;
+  }
+};
+
+class WorldRendererBoundary extends Component<{children: ReactNode; onFailure: () => void}, {failed: boolean}> {
+  state = {failed: false};
+
+  static getDerivedStateFromError() {
+    return {failed: true};
+  }
+
+  componentDidCatch() {
+    this.props.onFailure();
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
 
 let audioContext: AudioContext | null = null;
 const playTone = (frequency: number, duration = 0.075, volume = 0.022) => {
@@ -52,6 +81,7 @@ export const App = () => {
   const [quality, setQuality] = useState<RenderQuality>(() => typeof window !== 'undefined' && window.innerWidth < 760 ? 'low' : 'medium');
   const [soundOn, setSoundOn] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(() => typeof window === 'undefined' || window.innerWidth >= 900);
+  const [threeDEnabled, setThreeDEnabled] = useState(canUseWebGL);
   const [cameraResetToken, setCameraResetToken] = useState(0);
   const [selectedGap, setSelectedGap] = useState(3600);
   const [tuning, setTuning] = useState<TuningInputs>({timeoutMinutes: 30, maxWalGiB: 8, completionTarget: 0.9, walRateGiBPerHour: 12});
@@ -126,19 +156,25 @@ export const App = () => {
 
   return (
     <div
-      className={`sim-app scenario-${scenarioId}`}
+      className={`sim-app scenario-${scenarioId} ${threeDEnabled ? 'render-3d' : 'render-fallback'}`}
       style={{'--mountain-image': `url("${ASSET_BASE}assets/percona-mountains.webp")`} as CSSProperties}
     >
       <div className="mountain-backdrop" aria-hidden="true" />
       <div className="atmosphere" aria-hidden="true"><i /><i /><i /></div>
-      <TopBar scenario={scenario} snapshot={snapshot} progress={progress} quality={quality} soundOn={soundOn} onToggleSound={toggleSound} onResetView={() => setCameraResetToken((token) => token + 1)} onQualityChange={setQuality} />
+      <TopBar scenario={scenario} snapshot={snapshot} progress={progress} quality={quality} soundOn={soundOn} threeDEnabled={threeDEnabled} onToggleSound={toggleSound} onResetView={() => setCameraResetToken((token) => token + 1)} onQualityChange={setQuality} />
 
       <main className={`world-stage ${inspectorOpen ? 'inspector-visible' : ''}`}>
-        <Suspense fallback={<div className="world-loader"><i /><strong>Building Checkpoint Ridge</strong><span>Loading the interactive 3D system map…</span></div>}>
-          <WorldCanvas scenario={scenarioId} selectedNode={selectedNode} snapshot={snapshot} progress={progress} quality={quality} cameraResetToken={cameraResetToken} onSelectNode={chooseNode} />
-        </Suspense>
-        <NarrativeCard scenario={scenario} progress={progress} snapshot={snapshot} />
-        <Minimap scenario={scenarioId} selectedNode={selectedNode} onSelectNode={chooseNode} />
+        {threeDEnabled ? (
+          <WorldRendererBoundary onFailure={() => setThreeDEnabled(false)}>
+            <Suspense fallback={<div className="world-loader"><i /><strong>Building Checkpoint Ridge</strong><span>Loading the interactive 3D system map…</span></div>}>
+              <WorldCanvas scenario={scenarioId} selectedNode={selectedNode} snapshot={snapshot} progress={progress} quality={quality} cameraResetToken={cameraResetToken} onSelectNode={chooseNode} />
+            </Suspense>
+          </WorldRendererBoundary>
+        ) : (
+          <WorldFallback scenario={scenarioId} selectedNode={selectedNode} snapshot={snapshot} progress={progress} onSelectNode={chooseNode} />
+        )}
+        <NarrativeCard scenario={scenario} progress={progress} snapshot={snapshot} threeDEnabled={threeDEnabled} />
+        <Minimap scenario={scenarioId} selectedNode={selectedNode} threeDEnabled={threeDEnabled} onSelectNode={chooseNode} />
         <div className="model-key" aria-label="Visual data key">
           <span><i className="concept-dot" />Conceptual motion</span>
           <span><i className="measured-dot" />Measured in inspector</span>
@@ -154,6 +190,7 @@ export const App = () => {
         tuning={tuning}
         snapshot={snapshot}
         progress={progress}
+        threeDEnabled={threeDEnabled}
         onClose={() => setInspectorOpen(false)}
         onOpen={() => setInspectorOpen(true)}
         onGapChange={(gap) => {setSelectedGap(gap); if (soundOn) playTone(390 + BENCHMARK.findIndex((point) => point.gapSeconds === gap) * 45);}}

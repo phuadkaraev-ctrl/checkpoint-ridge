@@ -1,6 +1,6 @@
 import {SYSTEM_NODES, type ScenarioId, type SystemNodeId} from '../data';
 
-type MinimapProps = {scenario: ScenarioId; selectedNode: SystemNodeId; onSelectNode: (node: SystemNodeId) => void};
+type MinimapProps = {scenario: ScenarioId; selectedNode: SystemNodeId; threeDEnabled: boolean; onSelectNode: (node: SystemNodeId) => void};
 
 const LINKS: readonly [SystemNodeId, SystemNodeId][] = [
   ['clients', 'buffers'], ['clients', 'wal'], ['buffers', 'checkpointer'], ['checkpointer', 'storage'],
@@ -9,12 +9,12 @@ const LINKS: readonly [SystemNodeId, SystemNodeId][] = [
 
 const RECOVERY_LINKS: readonly [SystemNodeId, SystemNodeId][] = [['pgcontrol', 'wal'], ['wal', 'storage']];
 
-export const Minimap = ({scenario, selectedNode, onSelectNode}: MinimapProps) => {
+export const Minimap = ({scenario, selectedNode, threeDEnabled, onSelectNode}: MinimapProps) => {
   const byId = (id: SystemNodeId) => SYSTEM_NODES.find((node) => node.id === id) ?? SYSTEM_NODES[0];
   const links = scenario === 'recovery' ? [...LINKS, ...RECOVERY_LINKS] : LINKS;
   return (
     <aside className="minimap" aria-label="Checkpoint Ridge map">
-      <div className="minimap-heading"><span>N</span><strong>SYSTEM MAP</strong><small>ORBIT</small></div>
+      <div className="minimap-heading"><span>N</span><strong>SYSTEM MAP</strong><small>{threeDEnabled ? 'ORBIT' : '2D'}</small></div>
       <svg viewBox="0 0 112 96" role="img" aria-label="Clickable map of PostgreSQL system districts">
         <path className="mini-island" d="M8 54 24 21l37-12 41 15 4 43-27 22-49-5Z" />
         {links.map(([from, to]) => {

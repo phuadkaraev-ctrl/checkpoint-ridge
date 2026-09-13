@@ -1,9 +1,9 @@
 import {getCycleStage, type Scenario} from '../data';
 import type {ModelSnapshot} from '../simulation';
 
-type NarrativeCardProps = {scenario: Scenario; progress: number; snapshot: ModelSnapshot};
+type NarrativeCardProps = {scenario: Scenario; progress: number; snapshot: ModelSnapshot; threeDEnabled: boolean};
 
-export const NarrativeCard = ({scenario, progress, snapshot}: NarrativeCardProps) => {
+export const NarrativeCard = ({scenario, progress, snapshot, threeDEnabled}: NarrativeCardProps) => {
   const stage = scenario.id === 'cycle' ? getCycleStage(progress) : null;
   const evidenceClass = scenario.evidence === 'Measured'
     ? 'measured'
@@ -26,8 +26,17 @@ export const NarrativeCard = ({scenario, progress, snapshot}: NarrativeCardProps
         <p>{stage?.detail ?? scenario.boundary}</p>
       </div>
       <div className="gesture-hints" aria-hidden="true">
-        <span><i className="gesture-orbit" />Drag to orbit</span>
-        <span><i className="gesture-zoom" />Scroll to zoom</span>
+        {threeDEnabled ? (
+          <>
+            <span><i className="gesture-orbit" />Drag to orbit</span>
+            <span><i className="gesture-zoom" />Scroll to zoom</span>
+          </>
+        ) : (
+          <>
+            <span><i className="gesture-path" />Follow the rails</span>
+            <span><i className="gesture-scenario" />Run a scenario</span>
+          </>
+        )}
         <span><i className="gesture-select" />Select a district</span>
       </div>
       <div className="narrative-state"><i /><span>{snapshot.phaseDetail}</span></div>

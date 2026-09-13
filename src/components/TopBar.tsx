@@ -8,6 +8,7 @@ type TopBarProps = {
   progress: number;
   quality: RenderQuality;
   soundOn: boolean;
+  threeDEnabled: boolean;
   onToggleSound: () => void;
   onResetView: () => void;
   onQualityChange: (quality: RenderQuality) => void;
@@ -22,7 +23,7 @@ const SpeakerIcon = ({on}: {on: boolean}) => (
   </svg>
 );
 
-export const TopBar = ({scenario, snapshot, progress, quality, soundOn, onToggleSound, onResetView, onQualityChange}: TopBarProps) => (
+export const TopBar = ({scenario, snapshot, progress, quality, soundOn, threeDEnabled, onToggleSound, onResetView, onQualityChange}: TopBarProps) => (
   <header className="top-deck">
     <a className="sim-brand" href="https://percona.community/" target="_blank" rel="noreferrer" aria-label="Percona Community">
       <img src={`${ASSET_BASE}assets/brand/percona-community-logo.svg`} alt="Percona Community" />
@@ -44,15 +45,21 @@ export const TopBar = ({scenario, snapshot, progress, quality, soundOn, onToggle
       <button type="button" onClick={onToggleSound} className={soundOn ? 'active' : ''} aria-label={`Turn interface sound ${soundOn ? 'off' : 'on'}`}>
         <SpeakerIcon on={soundOn} /><span>Sound {soundOn ? 'on' : 'off'}</span>
       </button>
-      <button type="button" onClick={onResetView} aria-label="Reset camera view">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7v5h5M6.6 17A8 8 0 1 0 5 9" /></svg><span>Reset view</span>
-      </button>
-      <label className="quality-control">
-        <span className="sr-only">Render quality</span>
-        <select value={quality} onChange={(event) => onQualityChange(event.target.value as RenderQuality)}>
-          <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-        </select>
-      </label>
+      {threeDEnabled ? (
+        <>
+          <button type="button" onClick={onResetView} aria-label="Reset camera view">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7v5h5M6.6 17A8 8 0 1 0 5 9" /></svg><span>Reset view</span>
+          </button>
+          <label className="quality-control">
+            <span className="sr-only">Render quality</span>
+            <select value={quality} onChange={(event) => onQualityChange(event.target.value as RenderQuality)}>
+              <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+            </select>
+          </label>
+        </>
+      ) : (
+        <span className="render-mode-badge"><small>DISPLAY</small><strong>2D FALLBACK</strong></span>
+      )}
     </nav>
   </header>
 );

@@ -581,7 +581,6 @@ export const WorldCanvas = (props: WorldCanvasProps) => (
     >
       <World {...props} />
     </Canvas>
-    <div className="canvas-fallback">Your browser needs WebGL to explore Checkpoint Ridge.</div>
   </div>
 );
 
