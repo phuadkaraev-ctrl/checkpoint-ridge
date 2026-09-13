@@ -1,15 +1,26 @@
 # Checkpoint Ridge
 
-Checkpoint Ridge is an interactive, technically grounded exploration of PostgreSQL checkpoint tuning for Percona Community.
+Checkpoint Ridge is a one-screen, orbitable 3D field lab for understanding PostgreSQL checkpoint tuning. It translates the checkpoint system into a connected landscape: clients, `shared_buffers`, WAL, the checkpointer, storage, `global/pg_control`, and a physical standby.
 
-It turns one checkpoint cycle into a guided browser experience: dirty buffers, paced checkpoint writes, synchronization, the recovery boundary, first post-checkpoint full-page images, measured WAL/FPI results, tuning controls, and version-aware monitoring.
+The experience was built for Percona Community and follows the technical sequence and measured PostgreSQL 18 test in [Importance of Tuning Checkpoint in PostgreSQL](https://www.percona.com/blog/importance-of-tuning-checkpoint-in-postgresql/).
 
-## What makes it trustworthy
+## Experience
 
-- **Measured:** The four WAL and `wal_fpi` results are preserved exactly from Jobin Augustine's PostgreSQL 18 pgbench test.
-- **Modeled:** Page counts, movement, timing, and pressure curves are explicitly labeled as time-compressed illustrations.
-- **Operator data:** Tuning output remains directional. The app does not predict WAL volume or recovery time for another system.
-- **Versioned:** Monitoring guidance distinguishes `pg_stat_bgwriter` through PostgreSQL 16 from `pg_stat_checkpointer` in PostgreSQL 17 and newer.
+- Orbit, pan, and zoom through seven clickable PostgreSQL districts.
+- Run a guided checkpoint from dirty buffers through paced writes, `fsync()`, the redo boundary, and the post-checkpoint FPI wave.
+- Follow the jumping goat along the same conceptual spike line it explains.
+- Compare the four exact `pgbench` WAL and `wal_fpi` observations.
+- Explore `checkpoint_timeout`, `max_wal_size`, and `checkpoint_completion_target` in a clearly labeled directional model.
+- Walk the recovery ground and distinguish checkpoint interval from WAL replay time.
+- Use the version-aware monitoring checklist and continue into the full post or Percona Community.
+
+## Evidence boundary
+
+Checkpoint Ridge distinguishes three classes of information directly in the interface:
+
+- **Measured:** Exact values from the four published test runs.
+- **Concept:** Time-compressed mechanism and pressure animations with no measured axis.
+- **Directional model:** Tuning controls that explain relationships without predicting another system.
 
 Read [docs/TECHNICAL_ACCURACY.md](docs/TECHNICAL_ACCURACY.md) for the complete claim boundary.
 
@@ -22,40 +33,28 @@ npm install
 npm run dev
 ```
 
-Then open the local URL printed by Vite.
-
 ## Validate and build
 
 ```bash
 npm test
 npm run typecheck
 npm run build
-npm run preview
 ```
 
-The production site is written to `dist/`.
-
-## Publish with GitHub Pages
-
-The included workflow at `.github/workflows/deploy-pages.yml` tests, builds, and publishes the site whenever `main` is pushed.
-
-1. Create a GitHub repository and push this directory to its `main` branch.
-2. Open **Settings → Pages** in the repository.
-3. Under **Build and deployment**, select **GitHub Actions** as the source.
-4. Run the workflow or push another commit.
-
-The Vite base path is relative, so both organization sites and project sites such as `https://OWNER.github.io/REPOSITORY/` work without changing the code.
+The production build is written to `dist/`. The GitHub Pages workflow tests and builds every push to `main` before deployment.
 
 ## Project structure
 
 ```text
 src/
-  components/           Guided cycle, benchmark, tuning and CTA surfaces
-  data.ts               Verified measurements, sources and narrative stages
-  data.test.ts          Exact-value and coverage tests
-public/assets/           Percona Community visual assets and fonts
-docs/                    Accuracy and content documentation
-.github/workflows/      GitHub Pages deployment
+  components/WorldCanvas.tsx   3D districts, paths, camera and goat wave
+  components/                  HUD, inspector, minimap and scenario rail
+  data.ts                      Verified facts, exact measurements and copy
+  simulation.ts                Bounded conceptual/directional model state
+  data.test.ts                 Exact-value, coverage and bounds tests
+public/assets/                 Percona visual assets and local fonts
+docs/                          Accuracy and experience maps
+.github/workflows/             GitHub Pages deployment
 ```
 
 ## Primary sources
@@ -65,8 +64,6 @@ docs/                    Accuracy and content documentation
 - [PostgreSQL 18 WAL Settings](https://www.postgresql.org/docs/18/runtime-config-wal.html)
 - [PostgreSQL 18 Monitoring Statistics](https://www.postgresql.org/docs/18/monitoring-stats.html)
 
-## Asset notes
+## Assets
 
-The Percona Community logo and mountain environment come from Percona Community. Goat artwork is reused from the companion checkpoint video project supplied for this work. Inter and IBM Plex Mono are distributed under their included font licenses.
-
-Brand assets are not granted a new license by this repository. Choose a source-code license and confirm brand-asset usage before inviting outside redistribution.
+The Percona Community logo and mountain artwork come from Percona Community. Goat artwork was supplied for the companion checkpoint video. Inter and IBM Plex Mono are distributed under the included font license. Brand assets are not granted a new license by this repository.

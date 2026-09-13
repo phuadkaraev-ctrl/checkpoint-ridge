@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest';
-import {BENCHMARK, CYCLE_STAGES, getCycleStage, reductionFromBaseline} from './data';
+import {BENCHMARK, CYCLE_STAGES, SCENARIOS, SYSTEM_NODES, getCycleStage, reductionFromBaseline} from './data';
+import {getModelSnapshot} from './simulation';
 
 describe('verified checkpoint content', () => {
   it('preserves the four PostgreSQL 18 pgbench measurements exactly', () => {
@@ -22,5 +23,27 @@ describe('verified checkpoint content', () => {
   it('derives benchmark reductions without changing source measurements', () => {
     expect(reductionFromBaseline(BENCHMARK[3].walGb, BENCHMARK[0].walGb)).toBe(83);
     expect(reductionFromBaseline(BENCHMARK[3].walFpi, BENCHMARK[0].walFpi)).toBe(89);
+  });
+
+  it('keeps every scenario and system district uniquely addressable', () => {
+    expect(new Set(SCENARIOS.map((scenario) => scenario.id)).size).toBe(SCENARIOS.length);
+    expect(new Set(SYSTEM_NODES.map((node) => node.id)).size).toBe(SYSTEM_NODES.length);
+    expect(SCENARIOS).toHaveLength(6);
+    expect(SYSTEM_NODES).toHaveLength(7);
+  });
+
+  it('keeps every modeled signal within a normalized boundary', () => {
+    const tuning = {timeoutMinutes: 30, maxWalGiB: 8, completionTarget: 0.9, illustrativeWalGiB: 6};
+    for (const scenario of SCENARIOS) {
+      for (let step = 0; step <= 100; step += 1) {
+        const snapshot = getModelSnapshot(scenario.id, step / 100, tuning, BENCHMARK[3].walGb / BENCHMARK[0].walGb);
+        for (const signal of [snapshot.walIntensity, snapshot.fpiIntensity, snapshot.checkpointIntensity, snapshot.storageIntensity, snapshot.replayIntensity]) {
+          expect(signal).toBeGreaterThanOrEqual(0);
+          expect(signal).toBeLessThanOrEqual(1);
+        }
+        expect(snapshot.dirtyPages).toBeGreaterThanOrEqual(0);
+        expect(snapshot.dirtyPages).toBeLessThanOrEqual(100);
+      }
+    }
   });
 });

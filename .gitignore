@@ -5,3 +5,5 @@ dist/
 *.tsbuildinfo
 .vite/
 .env.local
+qa-*.png
+qa-server.log

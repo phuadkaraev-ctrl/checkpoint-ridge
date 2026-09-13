@@ -1,6 +1,6 @@
 # Technical accuracy boundary
 
-Checkpoint Ridge is an educational model, not a PostgreSQL emulator, monitoring agent, configuration recommender, or capacity planner.
+Checkpoint Ridge is an educational 3D system model, not a PostgreSQL emulator, monitoring agent, configuration recommender, or capacity planner.
 
 ## Reference scope
 
@@ -31,11 +31,12 @@ The interface derives percentage changes from these exact values. It does not in
 
 ## Explicit simplifications
 
-- The buffer pool displays 18 representative pages. It does not model the configured size of `shared_buffers`.
+- The buffer pool displays 24 representative pages. It does not model the configured size of `shared_buffers`.
 - Model time is compressed. It does not represent transaction latency, write bandwidth, or recovery duration.
 - The conceptual pressure curve has no measured axis.
 - The illustrative WAL-demand input is supplied by the user and is compared directionally with `max_wal_size`; it is not a reproduction of PostgreSQL's internal checkpoint-distance calculation.
 - A dirty page can be written by the background writer or through buffer eviction before a checkpoint. The guided flow focuses on checkpoint-driven writes.
+- More time between checkpoints can reduce repeated writes when a page remains dirty in `shared_buffers`; memory pressure can still force that page out earlier.
 - WAL recycling can be delayed by archiving, standbys, slots, backups, and other retention requirements.
 
 ## Intentionally excluded
