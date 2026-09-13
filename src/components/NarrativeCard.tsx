@@ -5,6 +5,9 @@ type NarrativeCardProps = {scenario: Scenario; progress: number; snapshot: Model
 
 export const NarrativeCard = ({scenario, progress, snapshot, threeDEnabled}: NarrativeCardProps) => {
   const stage = scenario.id === 'cycle' ? getCycleStage(progress) : null;
+  const body = !threeDEnabled && scenario.id === 'overview'
+    ? 'Follow the directional rails, select a district, or run a guided scenario to see where dirty pages, WAL, storage writes, recovery, and standby replay meet.'
+    : stage?.body ?? scenario.body;
   const evidenceClass = scenario.evidence === 'Measured'
     ? 'measured'
     : scenario.evidence === 'Directional model'
@@ -20,7 +23,7 @@ export const NarrativeCard = ({scenario, progress, snapshot, threeDEnabled}: Nar
       </div>
       <p className="narrative-eyebrow">{stage?.kicker ?? scenario.eyebrow}</p>
       <h1>{stage?.title ?? scenario.title}</h1>
-      <p className="narrative-copy">{stage?.body ?? scenario.body}</p>
+      <p className="narrative-copy">{body}</p>
       <div className="technical-boundary">
         <span>TECHNICAL BOUNDARY</span>
         <p>{stage?.detail ?? scenario.boundary}</p>

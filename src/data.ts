@@ -187,7 +187,7 @@ export const SCENARIOS: readonly Scenario[] = [
     tab: 'Tuning console',
     eyebrow: 'THREE CONTROLS, ONE SYSTEM',
     title: 'Plan the interval, make room for WAL, and spread the I/O.',
-    body: 'Adjust checkpoint_timeout, max_wal_size, and checkpoint_completion_target. The 3D response is directional so you can reason about the trade-offs safely.',
+    body: 'Adjust checkpoint_timeout, max_wal_size, and checkpoint_completion_target. The visual response is directional so you can reason about the trade-offs safely.',
     boundary: 'There is no universal safe value. Validate against your workload, WAL rate, storage, archiving, replication, and recovery requirements.',
     evidence: 'Directional model',
     focus: 'checkpointer',

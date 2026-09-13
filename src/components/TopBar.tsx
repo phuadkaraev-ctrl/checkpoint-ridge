@@ -27,7 +27,7 @@ export const TopBar = ({scenario, snapshot, progress, quality, soundOn, threeDEn
   <header className="top-deck">
     <a className="sim-brand" href="https://percona.community/" target="_blank" rel="noreferrer" aria-label="Percona Community">
       <img src={`${ASSET_BASE}assets/brand/percona-community-logo.svg`} alt="Percona Community" />
-      <span><strong>Checkpoint Ridge</strong><small>PostgreSQL 3D lab</small></span>
+      <span><strong>Checkpoint Ridge</strong><small>PostgreSQL checkpoint lab</small></span>
     </a>
 
     <div className="telemetry-strip" aria-label="Current model state">
